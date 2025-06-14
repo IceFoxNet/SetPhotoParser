@@ -263,7 +263,7 @@ def sort_edited_images(set_number, yandex: yadisk.YaDisk):
 def main(start: int, end: int, setup: dict):
     # Подключаемся к таблице
     if start < 3: start = 3
-    sheet: gspread.spreadsheet.Spreadsheet = setup.get('GoogleSheet')
+    sheet: gspread.spreadsheet.Spreadsheet = setup.get('AutoloadSheet')
     yandex: yadisk.YaDisk = setup.get('YandexDisk')
     worksheet = sheet.worksheet("📦 Наборы")
 
