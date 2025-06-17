@@ -1,4 +1,4 @@
-from database import DBConnect
+from scope_db import DBConnect
 import os
 
 while True:
