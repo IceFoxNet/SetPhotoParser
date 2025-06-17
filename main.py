@@ -1,3 +1,4 @@
+from database import DBConnect
 import os
 
 while True:
@@ -6,7 +7,6 @@ while True:
         import numpy as np
         from PIL import Image, ImageOps
         from playwright.sync_api import sync_playwright
-        from database import DBConnect
     except ImportError as e:
         package = e.msg.split()[-1][1:-1]
         os.system(f'python -m pip install {package}')
