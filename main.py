@@ -6,6 +6,7 @@ while True:
         import numpy as np
         from PIL import Image, ImageOps
         from playwright.sync_api import sync_playwright
+        from database import DBConnect
     except ImportError as e:
         package = e.msg.split()[-1][1:-1]
         os.system(f'python -m pip install {package}')
@@ -167,7 +168,7 @@ def remove_duplicates(set_folder):
     print(f"Удаление дубликатов завершено. Обработанные файлы: {processed_images}")
 
 # Функция для загрузки изображений
-def scrape_images(set_number, yandex: yadisk.YaDisk):
+def scrape_images(set_number, yandex: yadisk.YaDisk, dbconn: DBConnect):
     base_folder = os.path.join(workspace, "images")
     raw_folder = os.path.join(base_folder, f'{set_number}-raw')
 
@@ -205,11 +206,11 @@ def scrape_images(set_number, yandex: yadisk.YaDisk):
                     crop_and_center(save_path)
 
             remove_duplicates(raw_folder)
-            sort_edited_images(set_number, yandex)
+            sort_edited_images(set_number, yandex, dbconn)
         except Exception as e:
             print(f"Ошибка: {e}")
 
-def sort_edited_images(set_number, yandex: yadisk.YaDisk):
+def sort_edited_images(set_number, yandex: yadisk.YaDisk, dbconn: DBConnect):
     
     # Подготавливаем директории
     base_folder = os.path.join(workspace, "images")
@@ -245,14 +246,42 @@ def sort_edited_images(set_number, yandex: yadisk.YaDisk):
             shutil.copy(all_items[idx+box_counter], os.path.join(set_folder, f'{idx+1}.jpg'))
         shutil.rmtree(raw_folder)
         
-        yandex.makedirs(f'Авито/{set_number}')
+        try:
+            yandex.remove(f'Авито/{set_number}')
+        except:
+            pass
+        try:
+            yandex.makedirs(f'Авито/{set_number}')
+        except:
+            pass
         for pic in os.listdir(set_folder):
-            yandex.upload(os.path.join(set_folder, pic), f'Авито/{set_number}/{pic}', overwrite=True)
+            disk_path = f'Авито/{set_number}/{pic}'
+            yandex.upload(os.path.join(set_folder, pic), disk_path, overwrite=True)
+            yandex.publish(disk_path)
+            media_url = yandex.get_meta(disk_path).public_url
+            if media_url is not None:
+                media_url = media_url.replace('yadi.sk', 'disk.yandex.ru')
+            dbconn.delete_media(set_number, disk_path)
+            dbconn.create_media(media_url, disk_path, set_number, f'ID-S-{set_number}-0-0', f'Карточка набора {pic}, без коробок, фотографии BrickLink + Bricker')
         shutil.rmtree(set_folder)
         
-        yandex.makedirs(f'Авито/{set_number}-K')
+        try:
+            yandex.remove(f'Авито/{set_number}-K')
+        except:
+            pass
+        try:
+            yandex.makedirs(f'Авито/{set_number}-K')
+        except:
+            pass
         for pic in os.listdir(k_folder):
-            yandex.upload(os.path.join(set_folder, pic), f'Авито/{set_number}-K/{pic}', overwrite=True)
+            disk_path = f'Авито/{set_number}-K/{pic}'
+            yandex.upload(os.path.join(k_folder, pic), disk_path, overwrite=True)
+            yandex.publish(disk_path)
+            media_url = yandex.get_meta(disk_path).public_url
+            if media_url is not None:
+                media_url = media_url.replace('yadi.sk', 'disk.yandex.ru')
+            dbconn.delete_media(set_number, disk_path)
+            dbconn.create_media(media_url, disk_path, str(set_number)+'-K', f'ID-S-{set_number}-0-0', f'Карточка набора {pic}, с коробками, фотографии BrickLink + Bricker')
         shutil.rmtree(k_folder)
         
         print(f'Фотографии по артикулу {set_number} расфасованы по директориям')
@@ -266,16 +295,22 @@ def main(start: int, end: int, setup: dict):
     sheet: gspread.spreadsheet.Spreadsheet = setup.get('AutoloadSheet')
     yandex: yadisk.YaDisk = setup.get('YandexDisk')
     worksheet = sheet.worksheet("📦 Наборы")
+    dbconn = DBConnect(setup.get('AppInfo'))
 
     # Получаем данные из диапазона D
     set_numbers = worksheet.range(f'D{start}:D{end}')
 
+
     # Обрабатываем каждый артикул
     for set_number in set_numbers:
+        if dbconn.is_actual_media_generated(set_number.value) and dbconn.is_actual_media_generated(set_number.value + '-K'):
+            print(f'Пропущен артикул {set_number.value}: актуальные карточки наборов уже сгенерированы')
+            continue
         print(f"Обработка набора: {set_number.value}")
-        scrape_images(set_number.value, yandex)
+        scrape_images(set_number.value, yandex, dbconn)
+    dbconn.close()
 
 # Основной блок программы
 if __name__ == "__main__":
     from Setup.setup import setup
-    main(3, 3, setup)
+    main(3, 8, setup)
